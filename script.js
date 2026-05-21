@@ -2,6 +2,8 @@ const canvas = document.getElementById('heartCanvas');
 const ctx = canvas.getContext('2d');
 const audio = document.getElementById('bgMusic');
 
+audio.volume = 0.5;
+
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;

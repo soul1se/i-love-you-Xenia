@@ -7,13 +7,42 @@ audio.volume = 0.5;
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    initStars(); 
 }
 window.addEventListener('resize', resize);
-resize();
 
 const points = [];
 const totalPoints = 350; 
 const textPhrase = "i love you, Xenia";
+
+const flyingPhrasesList = [
+    "you are the most beautiful",
+    "happy birthday, darling",
+    "i want you"
+];
+
+const flyingPhrases = [];
+
+let lastPhraseSpawnTime = 0;
+const SPAWN_COOLDOWN = 2000;
+
+const stars = [];
+const totalStars = 120; 
+
+function initStars() {
+    stars.length = 0;
+    for (let i = 0; i < totalStars; i++) {
+        stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 1.5 + 0.5, 
+            alpha: Math.random(), 
+            twinkleSpeed: 0.01 + Math.random() * 0.03, 
+            phase: Math.random() * Math.PI * 2, 
+            depth: 0.2 + Math.random() * 0.8 
+        });
+    }
+}
 
 for (let i = 0; i < totalPoints; i++) {
     const t = Math.PI * (-1 + 2 * i / totalPoints);
@@ -61,10 +90,47 @@ function playMusic() {
     }
 }
 
+function spawnFlyingPhrase(startX, startY) {
+    const randomIndex = Math.floor(Math.random() * flyingPhrasesList.length);
+    const text = flyingPhrasesList[randomIndex];
+    
+    flyingPhrases.push({
+        text: text,
+        x: startX,
+        y: startY,
+        startX: startX,
+        vy: -(1.0 + Math.random() * 1.3),
+        wobbleSpeed: 0.02 + Math.random() * 0.03,
+        wobbleAmplitude: 15 + Math.random() * 20,
+        wobblePhase: Math.random() * Math.PI * 2,
+        alpha: 0,
+        life: 0,
+        maxLife: 110 + Math.floor(Math.random() * 40),
+        baseScale: 13 + Math.random() * 3
+    });
+}
+
 function handleScreenClick(clientX, clientY) {
-    clickPos = { x: clientX, y: clientY };
-    pulseProgress = 1.0;
-    playMusic();
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const distanceToCenter = Math.sqrt(dx * dx + dy * dy);
+    
+    const baseScale = Math.min(canvas.width, canvas.height) * 0.015;
+    const heartClickRadius = baseScale * 18; 
+
+    if (distanceToCenter <= heartClickRadius) {
+        clickPos = { x: clientX, y: clientY };
+        pulseProgress = 1.0;
+        playMusic();
+        
+        const currentTime = Date.now();
+        if ((currentTime - lastPhraseSpawnTime) >= SPAWN_COOLDOWN) {
+            spawnFlyingPhrase(clientX, clientY);
+            lastPhraseSpawnTime = currentTime;
+        }
+    }
 }
 
 window.addEventListener('mousedown', (e) => handleScreenClick(e.clientX, e.clientY));
@@ -81,9 +147,32 @@ window.addEventListener('touchmove', (e) => {
     if(e.touches.length > 0) updateRotation(e.touches[0].clientX, e.touches[0].clientY);
 });
 
+resize(); 
+
 function animate() {
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    stars.forEach(star => {
+        star.phase += star.twinkleSpeed;
+        const currentAlpha = 0.2 + (Math.sin(star.phase) + 1) * 0.4 * star.alpha;
+
+        const offsetX = currentAngleY * 30 * star.depth;
+        const offsetY = currentAngleX * 30 * star.depth;
+
+        let renderX = star.x - offsetX;
+        let renderY = star.y - offsetY;
+
+        if (renderX < 0) renderX += canvas.width;
+        if (renderX > canvas.width) renderX -= canvas.width;
+        if (renderY < 0) renderY += canvas.height;
+        if (renderY > canvas.height) renderY -= canvas.height;
+
+        ctx.beginPath();
+        ctx.arc(renderX, renderY, star.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${currentAlpha})`;
+        ctx.fill();
+    });
 
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
@@ -144,6 +233,43 @@ function animate() {
         ctx.fillStyle = `rgba(157, 0, 255, ${Math.max(0.15, Math.min(1, alpha))})`; 
         ctx.fillText(textPhrase, screenX, screenY);
     });
+
+    for (let i = flyingPhrases.length - 1; i >= 0; i--) {
+        const fp = flyingPhrases[i];
+        
+        fp.life++;
+        fp.y += fp.vy;
+        
+        const progress = fp.life / fp.maxLife;
+        fp.x = fp.startX + Math.sin(fp.life * fp.wobbleSpeed + fp.wobblePhase) * fp.wobbleAmplitude * progress;
+        
+        if (progress < 0.2) {
+            fp.alpha = progress / 0.2;
+        } else if (progress > 0.6) {
+            fp.alpha = (1 - progress) / 0.4;
+        } else {
+            fp.alpha = 1;
+        }
+
+        if (fp.life >= fp.maxLife) {
+            flyingPhrases.splice(i, 1);
+            continue;
+        }
+        
+        const currentScale = fp.baseScale * (1 + progress * 0.3);
+        
+        ctx.font = `italic bold ${currentScale}px monospace`;
+        ctx.fillStyle = `rgba(157, 0, 255, ${fp.alpha * 0.85})`;
+        ctx.textAlign = "center";
+        
+        ctx.shadowBlur = 10 * fp.alpha;
+        ctx.shadowColor = "rgba(157, 0, 255, 0.6)";
+        
+        ctx.fillText(fp.text, fp.x, fp.y);
+    }
+    
+    ctx.shadowBlur = 0;
+    ctx.textAlign = "left";
 
     requestAnimationFrame(animate);
 }
